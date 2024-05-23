@@ -15,17 +15,25 @@ import (
 )
 
 type Config struct {
-	Dir string
-	Out string
+	Dir  string
+	Out  string
+	File string
 }
 
 type Layout struct {
-	Content template.HTML
+	Title   string
+	Content []template.HTML
 }
 
 var AppConfig = Config{
-	Dir: "./",
-	Out: "./",
+	Dir:  "./",
+	Out:  "./",
+	File: "",
+}
+
+var AppLayout = Layout{
+	Title:   "Liquipage",
+	Content: []template.HTML{},
 }
 
 func main() {
@@ -61,6 +69,18 @@ func main() {
 					Usage:       "output directory for the html file",
 					Destination: &AppConfig.Out,
 				},
+				&cli.StringFlag{
+					Name:        "file",
+					Aliases:     []string{"f"},
+					Usage:       "a single file",
+					Destination: &AppConfig.File,
+				},
+				&cli.StringFlag{
+					Name:        "title",
+					Aliases:     []string{"t"},
+					Usage:       "title for you static page",
+					Destination: &AppLayout.Title,
+				},
 			},
 			Action: func(c *cli.Context) error {
 				if c.NArg() > 0 {
@@ -72,6 +92,8 @@ func main() {
 					return err
 				}
 
+				mds := []string{}
+
 				for _, v := range paths {
 					content, err := getContentFromMDFile(v)
 					if err != nil {
@@ -82,10 +104,12 @@ func main() {
 						continue
 					}
 
-					err = generateHTMLFile(content)
-					if err != nil {
-						return err
-					}
+					mds = append(mds, content)
+				}
+
+				err = generateHTMLFile(mds)
+				if err != nil {
+					return err
 				}
 
 				return nil
@@ -100,6 +124,11 @@ func main() {
 
 func getMDFiles() ([]string, error) {
 	paths := []string{}
+
+	if len(AppConfig.File) > 0 {
+		paths = append(paths, AppConfig.File)
+		return paths, nil
+	}
 
 	err := filepath.Walk(AppConfig.Dir, func(path string, info os.FileInfo, err error) error {
 		if filepath.Ext(path) == ".md" {
@@ -129,12 +158,11 @@ func getContentFromMDFile(path string) (string, error) {
 	return content, nil
 }
 
-func generateHTMLFile(content string) error {
-	md := []byte(content)
-	html := convertMDToHTML(md)
-
-	layout := Layout{
-		Content: template.HTML(html),
+func generateHTMLFile(mds []string) error {
+	for _, v := range mds {
+		md := []byte(v)
+		html := convertMDToHTML(md)
+		AppLayout.Content = append(AppLayout.Content, template.HTML(html))
 	}
 
 	tmpl := template.Must(template.ParseFiles("layout.html"))
@@ -155,7 +183,7 @@ func generateHTMLFile(content string) error {
 	}
 	defer file.Close()
 
-	err = tmpl.Execute(file, layout)
+	err = tmpl.Execute(file, AppLayout)
 	if err != nil {
 		return err
 	}
